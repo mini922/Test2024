@@ -1,0 +1,261 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>給与計算アプリ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"], input[type="number"], input[type="time"] {
+            width: 60px;
+            margin-top: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+            display: block;
+        }
+
+            button:hover {
+                background-color: #0056b3;
+            }
+
+        .result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        .calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            width: 100%;
+            max-width: 1000px;
+            margin-top: 20px;
+        }
+
+            .calendar > div {
+                width: 150px;
+                height: 200px;
+                text-align: center;
+                border: 1px solid #ddd;
+                cursor: pointer;
+                padding: 5px;
+                box-sizing: border-box;
+                font-size: 0.9em;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }
+
+            .calendar .selected {
+                background-color: #007bff;
+                color: white;
+            }
+
+        .time-input {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+            .time-input input {
+                width: 80px;
+                margin: 2px 0;
+            }
+
+        .time-label {
+            font-size: 0.7em;
+            color: #666;
+            margin-top: 2px;
+            margin-bottom: 4px;
+        }
+
+        .holiday-check {
+            font-size: 0.8em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 5px;
+        }
+
+            .holiday-check label {
+                margin-left: 2px;
+                display: flex;
+                align-items: center;
+                cursor: pointer;
+            }
+
+            .holiday-check input[type="checkbox"] {
+                margin-right: 4px;
+            }
+
+        #calculate-section {
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <h1>給与計算アプリ</h1>
+    <label for="hourlyWage">基本時給:</label>
+    <input type="number" id="hourlyWage" value="1000"> 円<br><br>
+
+    <label for="transportationCost">交通費 (往復):</label>
+    <input type="number" id="transportationCost" value="500"> 円<br><br>
+
+    <h3>出勤日を選択:</h3>
+    <div class="calendar" id="calendar"></div>
+
+    <div id="calculate-section">
+        <button onclick="calculateSalary()">給与計算</button>
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const year = 2023;
+        const month = 7;
+
+        function generateCalendar(year, month) {
+            const calendar = document.getElementById('calendar');
+            calendar.innerHTML = '';
+            const date = new Date(year, month - 1, 1);
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayCell = document.createElement('div');
+                dayCell.innerHTML = `
+                        <strong>${day}</strong>
+                        <div class="time-input">
+                            <input type="time" class="start-time" placeholder="開始">
+                            <div class="time-label">出勤時間</div>
+                            <input type="time" class="end-time" placeholder="終了">
+                            <div class="time-label">退勤時間</div>
+                            <input type="number" class="break-time" placeholder="休憩" min="0" step="1">
+                            <div class="time-label">休憩時間（分）</div>
+                        </div>
+                        <div class="holiday-check">
+                            <label for="holiday-${day}">
+                                <input type="checkbox" id="holiday-${day}" class="holiday-checkbox">
+                                休日
+                            </label>
+                        </div>
+                    `;
+
+                dayCell.onclick = (event) => {
+                    if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'LABEL') {
+                        dayCell.classList.toggle('selected');
+                    }
+                };
+
+                calendar.appendChild(dayCell);
+            }
+        }
+
+        function calculateSalary() {
+            const hourlyWage = parseFloat(document.getElementById('hourlyWage').value);
+            const transportationCost = parseFloat(document.getElementById('transportationCost').value);
+            const selectedDays = document.querySelectorAll('.calendar .selected');
+
+            let totalWorkingHours = 0;
+            let totalWorkingDays = 0;
+            let totalHolidayHours = 0;
+            let totalNightHours = 0;
+            let totalHolidayNightHours = 0;
+            let totalOvertimeHours = 0;
+            let totalHolidayOvertimeHours = 0;
+            let totalBreakHours = 0;
+
+            selectedDays.forEach(day => {
+                const startTime = day.querySelector('.start-time').value;
+                const endTime = day.querySelector('.end-time').value;
+                const breakTimeMinutes = parseInt(day.querySelector('.break-time').value) || 0;
+                const isHoliday = day.querySelector('.holiday-checkbox').checked;
+
+                if (startTime && endTime) {
+                    const start = new Date(`2023-01-01T${startTime}:00`);
+                    const end = new Date(`2023-01-01T${endTime}:00`);
+                    if (end < start) end.setDate(end.getDate() + 1);  // 日をまたぐ場合
+
+                    let hours = (end - start) / (1000 * 60 * 60);
+
+                    // 休憩時間を差し引く
+                    const breakDuration = breakTimeMinutes / 60;
+                    hours -= breakDuration;
+                    totalBreakHours += breakDuration;
+
+                    let regularHours = Math.min(hours, 8);  // 通常勤務時間（最大8時間）
+                    let overtimeHours = Math.max(hours - 8, 0);  // 残業時間
+
+                    // 深夜時間の計算（22:00～翌5:00）
+                    let nightStart = new Date(start);
+                    nightStart.setHours(22, 0, 0);
+                    let nightEnd = new Date(end);
+                    nightEnd.setHours(5, 0, 0);
+                    if (nightEnd < nightStart) nightEnd.setDate(nightEnd.getDate() + 1);
+
+                    let nightHours = Math.max(0, (Math.min(end, nightEnd) - Math.max(start, nightStart)) / (1000 * 60 * 60));
+
+                    if (isHoliday) {
+                        totalHolidayHours += hours;
+                        totalHolidayOvertimeHours += overtimeHours;
+                        totalHolidayNightHours += nightHours;
+                    } else {
+                        totalWorkingHours += regularHours;
+                        totalOvertimeHours += overtimeHours;
+                        totalNightHours += nightHours;
+                    }
+
+                    totalWorkingDays++;
+                }
+            });
+
+            const regularPay = totalWorkingHours * hourlyWage;
+            const holidayPay = totalHolidayHours * hourlyWage * 1.35;
+            const overtimePay = totalOvertimeHours * hourlyWage * 1.25;
+            const holidayOvertimePay = totalHolidayOvertimeHours * hourlyWage * 1.5;
+            const nightPay = totalNightHours * hourlyWage * 0.25;  // 深夜給は基本給の25%
+            const holidayNightPay = totalHolidayNightHours * hourlyWage * 0.25; // 休日深夜給は基本給の25%
+            const totalTransportationCost = totalWorkingDays * transportationCost;
+            const totalSalary = regularPay + holidayPay + overtimePay + holidayOvertimePay + nightPay + holidayNightPay + totalTransportationCost;
+
+            const totalHours = totalWorkingHours + totalHolidayHours + totalOvertimeHours + totalHolidayOvertimeHours;
+
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                    総勤務時間: ${totalHours.toFixed(2)}時間<br>
+                    通常勤務時間: ${totalWorkingHours.toFixed(2)}時間<br>
+                    休日勤務時間: ${totalHolidayHours.toFixed(2)}時間<br>
+                    残業時間: ${totalOvertimeHours.toFixed(2)}時間<br>
+                    休日残業時間: ${totalHolidayOvertimeHours.toFixed(2)}時間<br>
+                    深夜勤務時間: ${totalNightHours.toFixed(2)}時間<br>
+                    休日深夜勤務時間: ${totalHolidayNightHours.toFixed(2)}時間<br>
+                    総休憩時間: ${totalBreakHours.toFixed(2)}時間<br>
+                    通常給与: ${regularPay.toFixed(0)}円<br>
+                    休日給与: ${holidayPay.toFixed(0)}円<br>
+                    残業給与: ${overtimePay.toFixed(0)}円<br>
+                    休日残業給与: ${holidayOvertimePay.toFixed(0)}円<br>
+                    深夜給与: ${nightPay.toFixed(0)}円<br>
+                    休日深夜給与: ${holidayNightPay.toFixed(0)}円<br>
+                    交通費: ${totalTransportationCost.toFixed(0)}円<br>
+                    合計給与: ${totalSalary.toFixed(0)}円
+                `;
+        }
+
+        generateCalendar(year, month);
+    </script>
+</body>
+</html>
